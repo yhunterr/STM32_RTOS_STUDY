@@ -18,3 +18,8 @@ INFO : Circuit diagram of the board
 <img src="https://github.com/user-attachments/assets/884e0d32-5fd3-490b-8c0a-76396920534c" width="100" />
 
 
+(2) Queue create, send, receive 
+
+COMMIT : Queue TEST1
+
+SITE : https://wowon.tistory.com/328
