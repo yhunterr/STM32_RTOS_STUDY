@@ -10,50 +10,34 @@ QueueHandle_t xQueue;
 
 void myTask()
 {
-
-  xQueue = xQueueCreate(5, sizeof(uint8_t));
-  xTaskCreate(task1, "Task1", 256, NULL, 1, NULL);
-  xTaskCreate(task2, "Task2", 256, NULL, 1, NULL);
+  xQueue = xQueueCreate(5, sizeof(uint16_t));
 }
 
-void task1(void *pvParameters)
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-  uint8_t i = 0;
-  GPIO_PinState last_state = HAL_GPIO_ReadPin(BTN1_GPIO_Port, BTN1_Pin);
-  GPIO_PinState current_state;
-  while(1)
+  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+  uint16_t i=0;
+  if(GPIO_Pin == BTN1_Pin)
   {
-    current_state = HAL_GPIO_ReadPin(BTN1_GPIO_Port, BTN1_Pin);
-    if(last_state == GPIO_PIN_SET && current_state == GPIO_PIN_RESET)
-    {
-      printf("BTN1 is clicked : %d \n",i);
-      if(xQueueSend(xQueue,&i,0) != pdPASS)
-      {
-        printf("FAIL ! \n");
-      }
-      i++;
-    }
-    last_state = current_state;
-    vTaskDelay(10);
+    printf("BTN1 clicked\n");
+    xQueueSendFromISR(xQueue, &GPIO_Pin, &xHigherPriorityTaskWoken);
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
   }
+  else if(GPIO_Pin == BTN2_Pin)
+  {
+    printf("BTN2 clicked\n");
+    printf("Queue count %u \n",uxQueueMessagesWaitingFromISR(xQueue));
+    if(xQueueReceiveFromISR(xQueue, &i, &xHigherPriorityTaskWoken))
+    {
+      printf("Queue received : 0x%x \n",i);
+    }
+    else
+    {
+      printf("Queue received FAIL\n");
+    }
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+  }
+  printf("\n");
 }
 
-void task2(void *pvParameters)
-{
-  uint8_t i=0;
-  while(1)
-  {
-    //if(uxQueueMessagesWaiting(xQueue) > 0)
-    {
-      if(xQueueReceive(xQueue, &i, 2000) == pdPASS)
-      {
-        printf("Queue received : %d \n",i);
-      }
-      else
-      {
-        printf("Queue received FAIL\n");
-      }
-    }
-    vTaskDelay(10);
-  }
-}
