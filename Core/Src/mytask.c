@@ -3,41 +3,66 @@
 #include "main.h"
 #include "FreeRTOS.h"
 #include "task.h"
-
-void task1(void *pvParameters);
-void task2(void *pvParameters);
-QueueHandle_t xQueue;
-
-void myTask()
-{
-  xQueue = xQueueCreate(5, sizeof(uint16_t));
-}
+#include "timers.h"
 
 
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-  uint16_t i=0;
-  if(GPIO_Pin == BTN1_Pin)
-  {
-    printf("BTN1 clicked\n");
-    xQueueSendFromISR(xQueue, &GPIO_Pin, &xHigherPriorityTaskWoken);
-    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-  }
-  else if(GPIO_Pin == BTN2_Pin)
-  {
-    printf("BTN2 clicked\n");
-    printf("Queue count %u \n",uxQueueMessagesWaitingFromISR(xQueue));
-    if(xQueueReceiveFromISR(xQueue, &i, &xHigherPriorityTaskWoken))
+
+
+TimerHandle_t xTimer;
+uint8_t ledState = 1;
+uint8_t ledCount = 10;
+
+
+typedef struct {
+    GPIO_TypeDef* GPIO_Port;
+    uint16_t GPIO_Pin;
+} LED_Params;
+
+
+// 타이머 콜백 함수
+void vTimerCallback(TimerHandle_t xTimer) {
+    LED_Params *ledInfo = (LED_Params *)pvTimerGetTimerID(xTimer);
+    if(ledState)
     {
-      printf("Queue received : 0x%x \n",i);
+      HAL_GPIO_WritePin(ledInfo->GPIO_Port, ledInfo->GPIO_Pin, GPIO_PIN_SET);
     }
     else
     {
-      printf("Queue received FAIL\n");
+      HAL_GPIO_WritePin(ledInfo->GPIO_Port, ledInfo->GPIO_Pin, GPIO_PIN_RESET);
     }
-    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-  }
-  printf("\n");
+    ledState = !ledState;
+    ledCount--;
+    if(ledCount==0)
+    {
+      xTimerStop(xTimer,0);
+    }
 }
 
+
+void myTask()
+{
+    static LED_Params led1 = {LED1_GPIO_Port, LED1_Pin};
+
+    // 타이머 생성
+    xTimer = xTimerCreate(
+        "Timer1",                // 타이머 이름
+        pdMS_TO_TICKS(1000),         // 타이머 주기 (1000ms)
+        pdTRUE,                     // 자동 재시작 (pdTRUE: 반복, pdFALSE: 1회)
+        &led1,                       // 타이머 ID
+        vTimerCallback              // 타이머 콜백 함수
+    );
+
+    // 타이머 생성 확인
+    if (xTimer == NULL) {
+        // 타이머 생성 실패 처리
+        printf("Failed to create timer!\r\n");
+        while (1);
+    }
+
+    // 타이머 시작
+    if (xTimerStart(xTimer, 0) != pdPASS) {
+        // 타이머 시작 실패 처리
+        printf("Failed to start timer!\r\n");
+        while (1);
+    }
+}
