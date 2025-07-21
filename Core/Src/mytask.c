@@ -8,44 +8,57 @@
 
 void task(void *pvParameters);
 
-SemaphoreHandle_t mutex;
+SemaphoreHandle_t xButtonSemaphore;
 
 int global_i=0;
-int end = 0;
+uint16_t GPIO_Pin_BTN;
 
 void myTask()
 {
-  mutex = xSemaphoreCreateMutex();
+
+  //xButtonSemaphore  = xSemaphoreCreateBinary(); // Binary Semaphore
+  xButtonSemaphore  = xSemaphoreCreateCounting(3,0); // Counting Semaphore
+
 
   xTaskCreate(task, "Task1", 256, "TASK1", 3, NULL);
-  xTaskCreate(task, "Task2", 256, "TASK2", 3, NULL);
 }
 
 void task(void *pvParameters)
 {
   int local_i = 0;
-  char *task_name;
-  task_name = (char *)pvParameters;
-
 
   while(1)
   {
-    if(xSemaphoreTake(mutex,portMAX_DELAY)== pdTRUE)
+    if (xSemaphoreTake(xButtonSemaphore, portMAX_DELAY) == pdTRUE)
     {
-      local_i = global_i;
+      printf("BTN PIN , Counting , local_i : %x,  %lu,  %d \n",GPIO_Pin_BTN, uxSemaphoreGetCount(xButtonSemaphore), local_i);
       local_i++;
-      if((global_i == local_i) || end)
-      {
-        printf("%s END\n",task_name);
-        end = 1;
-        vTaskDelay(1000);
-        vTaskDelete(NULL);
-      }
-      global_i = local_i;
-      printf("%s %d \n",task_name, global_i);
-      xSemaphoreGive(mutex);
     }
-    vTaskDelay(1);
+    vTaskDelay(100);
   }
+}
+
+
+#define DEBOUNCE_TIME_MS 50
+uint32_t debounce_time;
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+  //Debounce
+  uint32_t now = HAL_GetTick();
+  if (now-debounce_time < DEBOUNCE_TIME_MS)
+    return;
+  debounce_time = now;
+
+
+  GPIO_Pin_BTN = GPIO_Pin;
+
+  xSemaphoreGiveFromISR(xButtonSemaphore, &xHigherPriorityTaskWoken);
+  xSemaphoreGiveFromISR(xButtonSemaphore, &xHigherPriorityTaskWoken);
+  xSemaphoreGiveFromISR(xButtonSemaphore, &xHigherPriorityTaskWoken);
+
+  portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
